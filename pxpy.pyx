@@ -21,6 +21,12 @@ import datetime
 
 import sys
 
+cdef extern from *:
+    ctypedef char* const_char_ptr "const char*"
+
+from cpython.mem cimport PyMem_Malloc, PyMem_Free
+from cpython.version cimport PY_MAJOR_VERSION
+
 from libc.stdlib cimport *
 cdef extern from "stdlib.h" nogil:
     void *memset(void *str, int c, size_t n)
@@ -35,6 +41,8 @@ cdef extern from "Python.h":
 
 cdef extern from "string.h":
     int strnlen(char *s, int maxlen)
+    char *strcpy(char *, char *)
+
 
 cdef extern from "paradox.h":
     ctypedef enum fieldtype_t:
@@ -116,13 +124,27 @@ cdef extern from "paradox.h":
     ctypedef struct pxpindex_t
     ctypedef struct pxstream_t
 
+    
+    ctypedef struct Pxval_str:
+        char *val
+        int len
+    ctypedef union Pxval_value:
+        long lval
+        double dval
+        Pxval_str str
+    ctypedef struct pxval_t:
+        char isnull
+        int type
+        Pxval_value value
+        
+        
     pxdoc_t *PX_new()
-    pxdoc_t* PX_new2(void  (*errorhandler)(pxdoc_t *p, int type, char *msg, void *data),
-                     void* (*allocproc)(pxdoc_t *p, size_t size, char *caller),
-                     void* (*reallocproc)(pxdoc_t *p, void *mem, size_t size, char *caller),
+    pxdoc_t* PX_new2(void  (*errorhandler)(pxdoc_t *p, int type, const_char_ptr msg, void *data),
+                     void* (*allocproc)(pxdoc_t *p, size_t size, const_char_ptr caller),
+                     void* (*reallocproc)(pxdoc_t *p, void *mem, size_t size, const_char_ptr caller),
                      void  (*freeproc)(pxdoc_t *p, void *mem))
     char *PX_strdup(pxdoc_t *pxdoc, char *str)
-    int PX_open_file(pxdoc_t *pxdoc, char *filename)
+    int PX_open_file(pxdoc_t *pxdoc, const_char_ptr filename)
     int PX_create_file(pxdoc_t *pxdoc, pxfield_t *px_fields, unsigned int numfields,  char *filename, int type)
     int PX_read_primary_index(pxdoc_t *pindex)
     int PX_add_primary_index(pxdoc_t *pxdoc, pxdoc_t *pindex)
@@ -163,14 +185,15 @@ cdef class PXDoc:
     """
 
     cdef pxdoc_t *doc
-    cdef char *filename
+    cdef bytes filename
     cdef char isopen
 
     def __init__(self, filename):
         """
         Create a PXDoc instance, associated to the given external filename.
         """
-
+        if PY_MAJOR_VERSION >= 3 or isinstance(filename, unicode):
+            filename = filename.encode('utf8')
         self.filename = filename
         self.doc = PX_new2(&errorhandler, NULL, NULL, NULL)
         self.isopen = 0
@@ -179,8 +202,7 @@ cdef class PXDoc:
         """
         Open the data file.
         """
-
-        if PX_open_file(self.doc, self.filename)<0:
+        if PX_open_file(self.doc, self.filename) < 0:
             raise Exception("Couldn't open `%s`" % self.filename)
         self.isopen = 1
 
@@ -357,7 +379,7 @@ cdef class Table(PXDoc):
         Get number of fields in the table.
         """
 
-        return self.record.getFieldsCount()
+        return len(self.record)
 
     def readRecord(self, recno=None):
         """
@@ -376,16 +398,35 @@ cdef class Table(PXDoc):
         """
 
         if not recno:
-            recno = self.current_recno+1
+            recno = self.current_recno + 1
         else:
             self.current_recno = recno
 
-        if recno>=self.doc.px_head.px_numrecords:
+        if recno >= self.doc.px_head.px_numrecords:
             return False
 
         self.current_recno = recno
 
         return self.record.read(recno)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        ok = self.readRecord()
+        if not ok:
+            self.current_recno = -1
+            raise StopIteration()
+        return self.record
+
+    def __getitem__(self, key):
+        if key >= self.doc.px_head.px_numrecords:
+            raise IndexError()
+        self.record.read(key)
+        return self.record
+
+    def __len__(self):
+        return self.doc.px_head.px_numrecords
 
     def append(self, values):
         cdef char *b
@@ -629,6 +670,7 @@ cdef class Record:
     """
 
     cdef void *data
+    cdef int current_fieldno
     cdef Table table
     cdef public fields
 
@@ -643,15 +685,17 @@ cdef class Record:
         self.data = table.doc.malloc(table.doc,
                                      table.doc.px_head.px_recordsize,
                                      "Memory for record")
+        self.current_fieldno = -1
+
         self.table = table
         self.fields = []
         offset = 0
-        for i in range(self.getFieldsCount()):
+        for i in range(len(self)):
             field = RecordField(self, i, offset)
             self.fields.append(field)
-            offset = offset + table.doc.px_head.px_fields[i].px_flen
+            offset = offset + table.doc.px_head.px_fields[i].px_flen        
 
-    def getFieldsCount(self):
+    def __len__(self):
         """
         Get number of fields in the record.
         """
@@ -667,3 +711,18 @@ cdef class Record:
                                                                   self.table.filename))
         return True
 
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        fieldno = self.current_fieldno + 1
+        try:
+            field = self.fields[fieldno]
+            self.current_fieldno = fieldno
+            return field
+        except IndexError:
+            self.current_fieldno = -1
+            raise StopIteration()
+
+    def __getitem__(self, key):
+        return self.fields[key]

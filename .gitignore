@@ -1,2 +1,7 @@
-build/
-pxpy.c
+*.pyc
+/build/
+/pxpy.c
+/.pyrex/
+/dist/
+/pxpy.so
+/*.egg-info/
