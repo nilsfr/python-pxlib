@@ -23,22 +23,23 @@ class clean(_clean):
     """
     
     def run(self):
-        super(_clean, self).run()
+        _clean.run(self)
         for ext in self.distribution.ext_modules:
             cy_sources = [s for s in ext.sources if s.endswith('.pyx')]
             for cy_source in cy_sources:
-                c_source = cy_source[:-3] + 'c'
-                if os.path.exists(c_source):
-                    log.info('removing %s', c_source)
-                    os.remove(c_source)
+                for extension in ('c', 'so'):
+                    xfile = cy_source[:-3] + extension
+                    if os.path.exists(xfile):
+                        log.info('removing %s', xfile)
+                        os.remove(xfile)
 
 setup(
     name='python-pxlib',
     description="Python wrapper around pxlib",
     version='0.0.1',
     author="Lele Gaifax",
-    author_email = "lele@nautilus.homeip.net",
-    url = "http://pxlib.sourceforge.net/",
+    author_email="lele@nautilus.homeip.net",
+    url="http://pxlib.sourceforge.net/",
     test_suite='tests',
     cmdclass={
         'build_ext': build_ext,

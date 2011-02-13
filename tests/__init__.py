@@ -14,6 +14,13 @@ import pxpy
 FIXTURE_DIR = os.path.join(os.path.dirname(__file__), 'fixtures')
 
 class PxLibTest(unittest.TestCase):
+
+    def test_headers(self):
+        table = pxpy.Table(os.path.join(FIXTURE_DIR, 'KOMMENT.DB'))
+        table.open()
+        self.assertEqual(table.getTableName(), 'KOMMENT.DB')
+        table.close()
+
     def test_iteration(self):
         table = pxpy.Table(os.path.join(FIXTURE_DIR, 'LAND.DB'))
         table.open()
