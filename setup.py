@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # :Project:  pxpy -- Module setup
 # :Source:   $Source: /cvsroot/pxlib/bindings/python/Setup.py,v $
