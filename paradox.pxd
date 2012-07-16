@@ -46,8 +46,8 @@ cdef extern from "paradox.h":
         pxfFileTypSecIndex = 4
         pxfFileTypIncSecIndex = 5
         pxfFileTypNonIncSecIndexG = 6
-        pxfFileTypSecIndexG =       7
-        pxfFileTypIncSecIndexG =    8
+        pxfFileTypSecIndexG = 7
+        pxfFileTypIncSecIndexG = 8
 
     ctypedef struct pxfield_t:
         char *px_fname
@@ -86,38 +86,43 @@ cdef extern from "paradox.h":
     ctypedef struct pxdoc_t:
         char *px_name
         pxhead_t *px_head
-        char *targetencoding
         void *(*malloc)(pxdoc_t *p, unsigned int size, char *caller)
         void  (*free)(pxdoc_t *p, void *mem)
+        char *targetencoding
+        char *inputencoding
+        pxblob_t *px_blob
 
     ctypedef struct pxdatablockinfo_t
+
     ctypedef struct pxblob_t:
-        char *px_name
-        pxdoc_t * pxdoc
+        char *mb_name
+        pxdoc_t *pxdoc
 
     ctypedef struct pxpindex_t
-    ctypedef struct pxstream_t
 
+    ctypedef struct pxstream_t
     
     ctypedef struct Pxval_str:
         char *val
         int len
+
     ctypedef union Pxval_value:
         long lval
         double dval
         Pxval_str str
+
     ctypedef struct pxval_t:
         char isnull
         int type
         Pxval_value value
         
         
-    pxdoc_t *PX_new()
+    pxdoc_t* PX_new()
     pxdoc_t* PX_new2(void  (*errorhandler)(pxdoc_t *p, int type, const_char_ptr msg, void *data),
                      void* (*allocproc)(pxdoc_t *p, size_t size, const_char_ptr caller),
                      void* (*reallocproc)(pxdoc_t *p, void *mem, size_t size, const_char_ptr caller),
                      void  (*freeproc)(pxdoc_t *p, void *mem))
-    char *PX_strdup(pxdoc_t *pxdoc, char *str)
+    char* PX_strdup(pxdoc_t *pxdoc, char *str)
     int PX_open_file(pxdoc_t *pxdoc, const_char_ptr filename)
     int PX_create_file(pxdoc_t *pxdoc, pxfield_t *px_fields, unsigned int numfields,  char *filename, int type)
     int PX_read_primary_index(pxdoc_t *pindex)
@@ -126,28 +131,29 @@ cdef extern from "paradox.h":
     int PX_set_inputencoding(pxdoc_t *pxdoc, char *encoding)
     int PX_set_parameter(pxdoc_t *pxdoc, char *name, char *value)
     int PX_set_value(pxdoc_t *pxdoc, char *name, float value)
-    pxblob_t *PX_new_blob(pxdoc_t *pxdoc)
-    int PX_open_blob_file(pxblob_t *pxdoc, char *filename)
+    int PX_set_blob_file(pxdoc_t *pxdoc, const_char_ptr filename)
+    int PX_has_blob_file(pxdoc_t *pxdoc)
     int PX_close(pxdoc_t *pxdoc)
-    int PX_close_blob(pxblob_t *pxdoc)
-    void *PX_get_record(pxdoc_t *pxdoc, int recno, void *data)
-    void *PX_get_record2(pxdoc_t *pxdoc, int recno, void *data, int *deleted, pxdatablockinfo_t *pxdbinfo)
+
+    void* PX_get_record(pxdoc_t *pxdoc, int recno, void *data)
+    void* PX_get_record2(pxdoc_t *pxdoc, int recno, void *data, int *deleted, pxdatablockinfo_t *pxdbinfo)
     int PX_get_data_alpha(pxdoc_t *pxdoc, void *data, int len, char **value)
     int PX_get_data_bytes(pxdoc_t *pxdoc, void *data, int len, char **value)
     int PX_get_data_double(pxdoc_t *pxdoc, void *data, int len, double *value)
     int PX_get_data_long(pxdoc_t *pxdoc, void *data, int len, long *value)
     int PX_get_data_short(pxdoc_t *pxdoc, void *data, int len, short int *value)
     int PX_get_data_byte(pxdoc_t *pxdoc, void *data, int len, char *value)
+    int PX_get_data_blob(pxdoc_t *pxdoc, void *data, int len, int *mod, int *blobsize, char **value)
+    int PX_get_data_graphic(pxdoc_t *pxdoc, void *data, int len, int *mod, int *blobsize, char **value)
     int PX_get_parameter(pxdoc_t *pxdoc, const_char_ptr name, char **value)
+    pxval_t** PX_retrieve_record(pxdoc_t *pxdoc, int recno)
 
     int PX_put_record(pxdoc_t *pxdoc, char *data)
-
     void PX_put_data_alpha(pxdoc_t *pxdoc, char *data, int len, char *value)
     void PX_put_data_double(pxdoc_t *pxdoc, char *data, int len, double value)
     void PX_put_data_long(pxdoc_t *pxdoc, char *data, int len, int value)
     void PX_put_data_short(pxdoc_t *pxdoc, char *data, int len, short int value)
 
-    char *PX_read_blobdata(pxblob_t *pxblob, void *data, int len, int *mod, int *blobsize)
     void PX_SdnToGregorian(long int sdn, int *pYear, int *pMonth, int *pDay)
     long int PX_GregorianToSdn(int year, int month, int day)
 

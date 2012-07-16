@@ -50,7 +50,17 @@ class PxLibTest(unittest.TestCase):
                 self.assertEquals(field.getValue(), same_field.getValue())
                 self.assertEquals(field.fname, same_field.fname)
         table.close()
+
+    def test_blob_file(self):
+        table = pxpy.Table(os.path.join(FIXTURE_DIR, 'KOMMENT.DB'))
+        table.open()
+        table.setBlobFile(os.path.join(FIXTURE_DIR, 'KOMMENT.MB'))
         
+        for record in table:
+            for field in record:
+                print field
+        
+        table.close()
 
 if __name__ == "__main__":
     unittest.main()

@@ -21,7 +21,7 @@ import datetime
 
 import sys
 
-cimport python_unicode
+cimport cpython
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from cpython.version cimport PY_MAJOR_VERSION
 
@@ -32,127 +32,10 @@ from paradox cimport *
 cdef void errorhandler(pxdoc_t *p, int type, char *msg, void *data):
     print 'error', type, msg
 
-cdef class PXDoc:
-    """
-    Basic wrapper to 'pxdoc_t' based objects.
-    """
-
-    cdef pxdoc_t *doc
-    cdef bytes filename
-    cdef char isopen
-
-    def __init__(self, filename):
-        """
-        Create a PXDoc instance, associated to the given external filename.
-        """
-        if PY_MAJOR_VERSION >= 3 or isinstance(filename, unicode):
-            filename = filename.encode('utf8')
-        self.filename = filename
-        self.doc = PX_new2(&errorhandler, NULL, NULL, NULL)
-        self.isopen = 0
-
-    def open(self):
-        """
-        Open the data file.
-        """
-        if PX_open_file(self.doc, self.filename) < 0:
-            raise Exception("Couldn't open `%s`" % self.filename)
-        self.isopen = 1
-
-    def close(self):
-        """
-        Close the data file if needed.
-        """
-
-        if self.isopen:
-            PX_close(self.doc)
-            self.isopen = 0
-
-    def setTargetEncoding(self, encoding):
-        PX_set_targetencoding(self.doc, encoding)
-
-    def setInputEncoding(self, encoding):
-        PX_set_inputencoding(self.doc, encoding)
-
-    def setValue(self, parameter, value):
-        PX_set_value(self.doc, parameter, <float>value)
-
-    def setParameter(self, parameter, value):
-        PX_set_parameter(self.doc, parameter, value)
-
-    def getTableName(self):
-        return self.doc.px_head.px_tablename
-
-    def __dealloc__(self):
-        """
-        Close the data file
-        """
-
-        self.close()
-
-
-cdef class BlobFile:
-    """
-    External BLOb file.
-    """
-
-    cdef pxblob_t *blob
-    cdef char *filename
-    cdef char isopen
-
-    def __init__(self, PXDoc table, filename):
-        """
-        Create a new BlobFile instance, associated to the given external file.
-        """
-
-        self.filename = filename
-        self.blob = PX_new_blob(table.doc)
-        self.isopen = 0
-
-    def open(self):
-        """
-        Actually open the external blob file.
-        """
-
-        if PX_open_blob_file(self.blob, self.filename)<0:
-            raise Exception("Couldn't open blob `%s`" % self.filename)
-        self.isopen = 1
-
-    def close(self):
-        """
-        Close the external blob file, if needed.
-        """
-
-        if self.isopen:
-            PX_close_blob(self.blob)
-            self.isopen = 0
-
-    def __dealloc__(self):
-        """
-        Close the external blob file
-        """
-
-        self.close()
-
-cdef class PrimaryIndex(PXDoc):
-    """
-    The primary index file.
-    """
-
-    def open(self):
-        """
-        Open the primary index file.
-        """
-
-        PXDoc.open(self)
-        if PX_read_primary_index(self.doc)<0:
-            raise Exception("Couldn't read primary index `%s`" % self.filename)
-
-
 cdef class Record
+cdef class PXDoc
 
-
-cdef class Table(PXDoc):
+cdef class Table:
     """
     A `Table` represent a Paradox table, with primary index and blob file.
 
@@ -160,37 +43,30 @@ cdef class Table(PXDoc):
     keeps a copy of the values associated to each field.
     """
 
+    cdef PXDoc doc
     cdef readonly Record record
     cdef int current_recno
-    cdef BlobFile blob
     cdef PrimaryIndex primary_index
-
+    targetEncoding = "utf-8"
+    inputEncoding = "utf-8"
+    
     cdef fields
+
+    def __init__(self, filename):
+        self.doc = PXDoc(filename)
 
     def create(self, *fields):
         self.fields = fields
-        n = len(fields)
-        cdef pxfield_t *f = <pxfield_t *>(self.doc.malloc(self.doc,
-                                                          n * sizeof(pxfield_t),
-                                                          "Memory for fields"))
-        for i from 0 <= i < n:
-            f[i].px_fname = PX_strdup(self.doc, fields[i].fname)
-            f[i].px_flen = fields[i].flen
-            f[i].px_ftype = fields[i].ftype
-            f[i].px_fdc = 0
-
-        if PX_create_file(self.doc, f, n, self.filename, pxfFileTypIndexDB) < 0:
-            raise Exception("Couldn't open '%s'" % self.filename)
-        self.isopen = 1
-        self.current_recno = -1
+        self.doc.create(fields)
 
     def open(self):
         """
         Open the data file and associate a Record instance.
         """
-
-        PXDoc.open(self)
-        self.record = Record(self)
+        self.doc.open()
+        self.setTargetEncoding(self.targetEncoding)
+        self.setInputEncoding(self.inputEncoding)
+        self.record = Record(self.doc)
         self.current_recno = -1
         self.primary_index = None
 
@@ -198,43 +74,49 @@ cdef class Table(PXDoc):
         """
         Close the eventual primary index or blob file, then the data file.
         """
-
         if self.primary_index:
             self.primary_index.close()
-        if self.blob:
-            self.blob.close()
+        self.doc.close()
 
-        PXDoc.close(self)
+    def getTableName(self):
+        return self.doc.getTableName()
 
     def getCodePage(self):
         """
         Return the code page of the underlying Paradox table.
         """
+        return self.doc.getCodePage()
 
-        return "cp%d" % self.doc.px_head.px_doscodepage
+    def getTargetEncoding(self):
+        return self.doc.targetEncoding
 
-    def setPrimaryIndex(self, indexname):
+    def setTargetEncoding(self, encoding):
+        self.doc.targetEncoding = encoding
+
+    def getInputEncoding(self):
+        return self.doc.inputEncoding
+
+    def setInputEncoding(self, encoding):
+        self.doc.inputEncoding = encoding
+
+    def setPrimaryIndex(self, filename):
         """
         Set the primary index of the table.
         """
-
-        self.primary_index = PrimaryIndex(indexname)
+        self.primary_index = PrimaryIndex(filename)
         self.primary_index.open()
-        if PX_add_primary_index(self.doc, self.primary_index.doc)<0:
-            raise Exception("Couldn't add primary index `%s`" % indexname)
+        self.doc.setPrimaryIndex(self.primary_index)
 
-    def setBlobFile(self, blobfilename):
+    def setBlobFile(self, filename):
         """
         Set and open the external blob file.
         """
-        self.blob = BlobFile(self, blobfilename)
-        self.blob.open()
+        self.doc.setBlobFile(filename)
 
     def getFieldsCount(self):
         """
         Get number of fields in the table.
         """
-
         return len(self.record)
 
     def readRecord(self, recno=None):
@@ -258,7 +140,7 @@ cdef class Table(PXDoc):
         else:
             self.current_recno = recno
 
-        if recno >= self.doc.px_head.px_numrecords:
+        if recno >= len(self.doc):
             return False
 
         self.current_recno = recno
@@ -276,27 +158,130 @@ cdef class Table(PXDoc):
         return self.record
 
     def __getitem__(self, key):
-        if key >= self.doc.px_head.px_numrecords:
+        if key >= len(self.doc):
             raise IndexError()
         self.record.read(key)
         return self.record
 
     def __len__(self):
-        return self.doc.px_head.px_numrecords
+        return len(self.doc)
 
     def append(self, values):
+        self.doc.append(self.fields, values)
+        self.current_recno = self.current_recno + 1
+
+
+cdef class PXDoc:
+    """
+    Basic wrapper to 'pxdoc_t' based objects.
+    """
+
+    cdef pxdoc_t *px_doc
+    cdef bytes filename
+    cdef char isopen
+
+    def __init__(self, filename):
+        """
+        Create a PXDoc instance, associated to the given external filename.
+        """
+        if PY_MAJOR_VERSION >= 3 or isinstance(filename, unicode):
+            filename = filename.encode('utf8')
+        self.filename = filename
+        self.px_doc = PX_new2(&errorhandler, NULL, NULL, NULL)
+        self.isopen = 0
+
+    def __len__(self):
+        return self.px_doc.px_head.px_numrecords
+
+    def create(self, *fields):
+        n = len(fields)
+        cdef pxfield_t *f = <pxfield_t *>(self.px_doc.malloc(self.px_doc,
+                                                          n * sizeof(pxfield_t),
+                                                          "Memory for fields"))
+        for i from 0 <= i < n:
+            f[i].px_fname = PX_strdup(self.px_doc, fields[i].fname)
+            f[i].px_flen = fields[i].flen
+            f[i].px_ftype = fields[i].ftype
+            f[i].px_fdc = 0
+
+        if PX_create_file(self.px_doc, f, n, self.filename, pxfFileTypIndexDB) < 0:
+            raise Exception("Couldn't open '%s'" % self.filename)
+        self.isopen = 1
+        self.current_recno = -1
+
+    def open(self):
+        """
+        Open the data file.
+        """
+        if PX_open_file(self.px_doc, self.filename) < 0:
+            raise Exception("Couldn't open `%s`" % self.filename)
+        self.isopen = 1
+
+    def close(self):
+        """
+        Close the data file if needed.
+        """
+
+        if self.isopen:
+            PX_close(self.px_doc)
+            self.isopen = 0
+
+    def getCodePage(self):
+        """
+        Return the code page of the underlying Paradox table.
+        """
+        return "cp%d" % self.px_doc.px_head.px_doscodepage
+
+    def _getTargetEncoding(self):
+        if self.px_doc.targetencoding:
+            return self.px_doc.targetencoding
+        return None
+    def _setTargetEncoding(self, encoding):
+        PX_set_targetencoding(self.px_doc, encoding)
+    targetEncoding = property(_getTargetEncoding, _setTargetEncoding)
+
+    def _getInputEncoding(self):
+        if self.px_doc.inputencoding:
+            return self.px_doc.inputencoding
+        return None
+    def _setInputEncoding(self, encoding):
+        PX_set_inputencoding(self.px_doc, encoding)
+    inputEncoding = property(_getInputEncoding, _setInputEncoding)
+
+    def setValue(self, parameter, value):
+        PX_set_value(self.px_doc, parameter, <float>value)
+
+    def setParameter(self, parameter, value):
+        PX_set_parameter(self.px_doc, parameter, value)
+
+    def getTableName(self):
+        return self.px_doc.px_head.px_tablename
+
+    def setBlobFile(self, filename):
+        """
+        Set and open the external blob file.
+        """
+        PX_set_blob_file(self.px_doc, filename)
+
+    def setPrimaryIndex(self, PrimaryIndex index):
+        """
+        Set the primary index of the table.
+        """
+        if PX_add_primary_index(self.px_doc, index.px_doc) < 0:
+            raise Exception("Couldn't add primary index `%s`" % index.filename)
+
+    def append(self, fields, values):
         cdef char *b
-        l = len(self.fields)
-        n = sum([ f.flen for f in self.fields ])
+        l = len(fields)
+        n = sum([ f.flen for f in fields ])
         bufsize = n * sizeof(char)
-        cdef char *buffer = <char *>(self.doc.malloc(self.doc,
-                                                     bufsize,
-                                                     "Memory for appended record"))
+        cdef char *buffer = <char *>(
+            self.px_doc.malloc(self.px_doc, bufsize, "Memory for appended record"))
         memset(buffer, 0, bufsize)
         o = 0
         fs = {}
         for i from 0 <= i < l:
-            f = self.fields[i]
+            f = fields[i]
             v = values.get(f.fname, None)
             l = f.flen
             if v == None:
@@ -304,25 +289,68 @@ cdef class Table(PXDoc):
             if f.ftype == pxfAlpha:
                 s = unicode(str(v or '').decode('utf-8'))
                 s = s.encode(self.getCodePage())
-                b = <char *>(self.doc.malloc(self.doc, f.flen, "Memory for alpha field"))
+                b = <char *>(self.px_doc.malloc(self.px_doc, f.flen, "Memory for alpha field"))
                 memcpy(b, <char *>s, max(f.flen, len(s)))
-                PX_put_data_alpha(self.doc, &buffer[o], f.flen, b)
-                self.doc.free(self.doc, b)
+                PX_put_data_alpha(self.px_doc, &buffer[o], f.flen, b)
+                self.px_doc.free(self.px_doc, b)
             elif f.ftype == pxfLong:
-                PX_put_data_long(self.doc, &buffer[o], l, <long>int(v or 0))
+                PX_put_data_long(self.px_doc, &buffer[o], l, <long>int(v or 0))
             elif f.ftype == pxfNumber:
-                PX_put_data_double(self.doc, &buffer[o], l, <double>float(v or 0.0))
+                PX_put_data_double(self.px_doc, &buffer[o], l, <double>float(v or 0.0))
             else:
                 raise Exception("unknown type")
             o += f.flen
 
-
-        if PX_put_record(self.doc, buffer) == -1:
+        if PX_put_record(self.px_doc, buffer) == -1:
             raise Exception("unable to put record")
 
-        self.doc.free(self.doc, buffer)
+        self.px_doc.free(self.px_doc, buffer)
 
-        self.current_recno = self.current_recno + 1
+
+    def __dealloc__(self):
+        """
+        Close the data file
+        """
+        self.close()
+
+
+cdef class PrimaryIndex:
+    """
+    The primary index file.
+    """
+
+    cdef pxdoc_t *px_doc
+    cdef bytes filename
+    cdef char isopen
+
+    def __init__(self, filename):
+        """
+        Create a PXDoc instance, associated to the given external filename.
+        """
+        if PY_MAJOR_VERSION >= 3 or isinstance(filename, unicode):
+            filename = filename.encode('utf8')
+        self.filename = filename
+        self.px_doc = PX_new2(&errorhandler, NULL, NULL, NULL)
+        self.isopen = 0
+
+    def open(self):
+        """
+        Open the data file.
+        """
+        if PX_open_file(self.px_doc, self.filename) < 0:
+            raise Exception("Couldn't open `%s`" % self.filename)
+        if PX_read_primary_index(self.px_doc) < 0:
+            raise Exception("Couldn't read primary index `%s`" % self.filename)
+        self.isopen = 1
+
+    def close(self):
+        """
+        Close the data file if needed.
+        """
+        if self.isopen:
+            PX_close(self.px_doc)
+            self.isopen = 0
+
 
 cdef class ParadoxField:
     cdef readonly fname
@@ -341,6 +369,7 @@ cdef class ParadoxField:
     def __init__(self, fname, int ftype, int flen):
         self._init_fields(fname, ftype, flen)
 
+
 def default_field_length(int ftype, len = 10):
     if ftype == pxfLong:
         return 4
@@ -350,6 +379,7 @@ def default_field_length(int ftype, len = 10):
         return 8
     else:
         return 0
+
 
 def type_to_field_type(type ftype):
     if ftype == int:
@@ -361,11 +391,13 @@ def type_to_field_type(type ftype):
     else:
         raise Exception("unsupported field type %s" % ftype)
 
+
 cdef class Field(ParadoxField):
     def __init__(self, fname, type t, int flen = 0):
         ft = type_to_field_type(t)
         fl = default_field_length(ft, flen)
         ParadoxField.__init__(self, fname, ft, fl)
+
 
 cdef class RecordField(ParadoxField):
     """
@@ -385,9 +417,15 @@ cdef class RecordField(ParadoxField):
         self.record = record
         self.data = record.data+offset
         ParadoxField.__init__(self,
-                              record.table.doc.px_head.px_fields[index].px_fname,
-                              record.table.doc.px_head.px_fields[index].px_ftype,
-                              record.table.doc.px_head.px_fields[index].px_flen)
+                              record.doc.px_doc.px_head.px_fields[index].px_fname,
+                              record.doc.px_doc.px_head.px_fields[index].px_ftype,
+                              record.doc.px_doc.px_head.px_fields[index].px_flen)
+
+    def __str__(self):
+        return self.__unicode__().encode(self.record.doc.targetEncoding)
+
+    def __unicode__(self):
+        return self.getValue()
 
     def getValue(self):
         """
@@ -406,7 +444,7 @@ cdef class RecordField(ParadoxField):
         cdef int mod_nr
 
         if self.ftype == pxfAlpha:
-            codepage = self.record.table.getCodePage()
+            codepage = self.record.doc.getCodePage()
             size = strnlen(<char*> self.data, self.flen)
 
             if size==0:
@@ -418,7 +456,7 @@ cdef class RecordField(ParadoxField):
                 return PyString_AsDecodedObject(py_string, codepage, "replace")
 
         elif self.ftype == pxfDate:
-            if PX_get_data_long(self.record.table.doc,
+            if PX_get_data_long(self.record.doc.px_doc,
                                 self.data, self.flen, &value_long)<0:
                 raise Exception("Cannot extract long field '%s'" % self.fname)
             if value_long:
@@ -429,7 +467,7 @@ cdef class RecordField(ParadoxField):
                 return None
 
         elif self.ftype == pxfShort:
-            ret = PX_get_data_short(self.record.table.doc,
+            ret = PX_get_data_short(self.record.doc.px_doc,
                                     self.data, self.flen, &value_short)
             if ret < 0:
                 raise Exception("Cannot extract short field '%s'" % self.fname)
@@ -440,7 +478,7 @@ cdef class RecordField(ParadoxField):
             return value_short
 
         elif self.ftype == pxfLong or self.ftype == pxfAutoInc:
-            ret = PX_get_data_long(self.record.table.doc,
+            ret = PX_get_data_long(self.record.doc.px_doc,
                                    self.data, self.flen, &value_long)
             if ret < 0:
                 raise Exception("Cannot extract long field '%s'" % self.fname)
@@ -450,7 +488,7 @@ cdef class RecordField(ParadoxField):
             return value_long
 
         elif self.ftype == pxfCurrency or self.ftype == pxfNumber:
-            ret = PX_get_data_double(self.record.table.doc,
+            ret = PX_get_data_double(self.record.doc.px_doc,
                                      self.data, self.flen, &value_double)
             if ret < 0:
                 raise Exception("Cannot extract double field '%s'" % self.fname)
@@ -459,10 +497,10 @@ cdef class RecordField(ParadoxField):
             return value_double
 
         elif self.ftype == pxfLogical:
-            ret = PX_get_data_byte(self.record.table.doc,
+            ret = PX_get_data_byte(self.record.doc.px_doc,
                                    self.data, self.flen, &value_char)
             if ret < 0:
-                raise Exception("Cannot extract double field '%s'" % self.fname)
+                raise Exception("Cannot extract boolean field '%s'" % self.fname)
             if ret == 0:
                 return None
 
@@ -471,35 +509,43 @@ cdef class RecordField(ParadoxField):
             else:
                 return False
 
-        elif self.ftype in [pxfMemoBLOb, pxfFmtMemoBLOb]:
+        elif self.ftype in [pxfMemoBLOb, pxfFmtMemoBLOb, pxfBLOb]:
+            if not PX_has_blob_file(self.record.doc.px_doc):
+                return "[MISSING BLOB FILE]"
 
-            if not self.record.table.blob:
-                return "NO BLOB FILE"
+            ret = PX_get_data_blob(self.record.doc.px_doc, self.data, self.flen,
+                                   &mod_nr, &size, &blobdata)
+            if ret < 0:
+                raise Exception("Cannot extract blob field '%s'" % self.fname)
+            if ret == 0:
+                return None
 
-            blobdata = PX_read_blobdata(self.record.table.blob.blob,
-                                        self.data, self.flen,
-                                        &mod_nr, &size)
-            if blobdata and size>0:
-                codepage = self.record.table.getCodePage()
+            if blobdata and size > 0:
+                codepage = self.record.doc.getCodePage()
                 py_string = PyString_FromStringAndSize(<char*> blobdata, size);
                 if not py_string:
                     raise Exception("Cannot get value from string %s" % self.fname)
                 return PyString_AsDecodedObject(py_string, codepage, "replace")
 
-        elif self.ftype in [pxfBLOb, pxfGraphic]:
-            if not self.record.table.blob:
-                return "NO BLOB FILE"
+        elif self.ftype == pxfGraphic:
+            if not PX_has_blob_file(self.record.doc.px_doc):
+                return "[MISSING BLOB FILE]"
 
-            blobdata = PX_read_blobdata(self.record.table.blob.blob,
-                                        self.data, self.flen,
-                                        &mod_nr, &size)
-            if blobdata and size>0:
+            ret = PX_get_data_graphic(self.record.doc.px_doc, self.data, self.flen,
+                                      &mod_nr, &size, &blobdata)
+            if ret < 0:
+                raise Exception("Cannot extract graphic field '%s'" % self.fname)
+            if ret == 0:
+                return None
+
+            if blobdata and size > 0:
                 return PyString_FromStringAndSize(blobdata, size)
 
         elif self.ftype == pxfOLE:
             pass
+
         elif self.ftype == pxfTime:
-            if PX_get_data_long(self.record.table.doc,
+            if PX_get_data_long(self.record.doc.px_doc,
                                 self.data, self.flen, &value_long)<0:
                 raise Exception("Cannot extract long field '%s'" % self.fname)
             if value_long:
@@ -522,15 +568,15 @@ cdef class RecordField(ParadoxField):
 cdef class Record:
     """
     An instance of this class wraps the memory buffer associated to a
-    single record of a given table.
+    single record of a given PXDoc.
     """
 
     cdef void *data
     cdef int current_fieldno
-    cdef Table table
+    cdef PXDoc doc
     cdef public fields
 
-    def __init__(self, Table table):
+    def __init__(self, PXDoc doc):
         """
         Create a Record instance, allocating the memory buffer and
         building the list of the Field instances.
@@ -538,33 +584,33 @@ cdef class Record:
 
         cdef int offset
 
-        self.data = table.doc.malloc(table.doc,
-                                     table.doc.px_head.px_recordsize,
+        self.data = doc.px_doc.malloc(doc.px_doc,
+                                     doc.px_doc.px_head.px_recordsize,
                                      "Memory for record")
         self.current_fieldno = -1
 
-        self.table = table
+        self.doc = doc
         self.fields = []
         offset = 0
         for i in range(len(self)):
             field = RecordField(self, i, offset)
             self.fields.append(field)
-            offset = offset + table.doc.px_head.px_fields[i].px_flen        
+            offset = offset + doc.px_doc.px_head.px_fields[i].px_flen        
 
     def __len__(self):
         """
         Get number of fields in the record.
         """
-        return self.table.doc.px_head.px_numfields
+        return self.doc.px_doc.px_head.px_numfields
 
     def read(self, recno):
         """
         Read the data associated to the record numbered `recno`.
         """
 
-        if PX_get_record(self.table.doc, recno, self.data) == NULL:
+        if PX_get_record(self.doc.px_doc, recno, self.data) == NULL:
             raise Exception("Couldn't get record %d from '%s'" % (recno,
-                                                                  self.table.filename))
+                                                                  self.doc.filename))
         return True
 
     def __iter__(self):
