@@ -7,7 +7,7 @@
 # :Revision: $Revision: 1.2 $ by $Author: lele $
 # :Date:     $Date: 2004/07/19 14:38:04 $
 # 
-import unittest
+import unittest2 as unittest
 import os.path
 import pxpy
 
@@ -56,9 +56,19 @@ class PxLibTest(unittest.TestCase):
         table.open()
         table.setBlobFile(os.path.join(FIXTURE_DIR, 'KOMMENT.MB'))
         
+        baptistene = table[0]
+        field = baptistene[0]
+        self.assertEqual(field.name, u"Aar")
+        self.assertEqual(field.value, u"2006")
+        self.assertEqual(field.type, 1)
+        
+        self.assertEqual(baptistene[1].value, u"BAPTI")
+        self.assertRegexpMatches(baptistene[3].value, r"^Statistikken inkluderer")
+
+        
         for record in table:
-            for field in record:
-                print field
+            self.assertNotEqual(record[3], "[MISSING BLOB FILE]")
+
         
         table.close()
 

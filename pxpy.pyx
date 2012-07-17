@@ -81,12 +81,6 @@ cdef class Table:
     def getTableName(self):
         return self.doc.getTableName()
 
-    def getCodePage(self):
-        """
-        Return the code page of the underlying Paradox table.
-        """
-        return self.doc.getCodePage()
-
     def getTargetEncoding(self):
         return self.doc.targetEncoding
 
@@ -358,7 +352,6 @@ cdef class ParadoxField:
     cdef readonly flen
 
     def __cinit__(self, *args):
-        #print 'ParadoxField cinit', args
         pass
 
     def _init_fields(self, fname, int ftype, int flen):
@@ -426,6 +419,14 @@ cdef class RecordField(ParadoxField):
 
     def __unicode__(self):
         return self.getValue()
+
+    def getName(self):
+        return self.fname
+    name = property(getName)
+
+    def getType(self):
+        return self.ftype
+    type = property(getType)
 
     def getValue(self):
         """
@@ -563,7 +564,7 @@ cdef class RecordField(ParadoxField):
             pass
         elif self.ftype == pxfNumTypes:
             pass
-
+    value = property(getValue)
 
 cdef class Record:
     """

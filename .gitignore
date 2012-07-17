@@ -5,3 +5,4 @@
 /dist/
 /pxpy.so
 /*.egg-info/
+/*.egg/

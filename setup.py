@@ -51,6 +51,7 @@ setup(
     ],
     zip_safe=False,
     setup_requires=["Cython>=0.13"],
+    tests_require=["unittest2==0.5.1"],
     ext_modules=[
         Extension('pxpy', ['pxpy.pyx'],
                   libraries=['px']),
