@@ -103,6 +103,9 @@ cdef class Table:
         """
         Set and open the external blob file.
         """
+        if PY_MAJOR_VERSION >= 3 or isinstance(filename, unicode):
+            filename = filename.encode(self.inputEncoding)
+
         self.doc.setBlobFile(filename)
 
     def getFieldsCount(self):
@@ -224,21 +227,22 @@ cdef class PXDoc:
         """
         return "cp%d" % self.px_doc.px_head.px_doscodepage
 
-    def _getTargetEncoding(self):
-        if self.px_doc.targetencoding:
-            return self.px_doc.targetencoding
-        return None
-    def _setTargetEncoding(self, encoding):
-        PX_set_targetencoding(self.px_doc, encoding)
-    targetEncoding = property(_getTargetEncoding, _setTargetEncoding)
+    property targetEncoding:
+        def __get__(self):
+            if self.px_doc.targetencoding:
+                return self.px_doc.targetencoding
+            return None
+        def __set__(self, encoding):
+            PX_set_targetencoding(self.px_doc, encoding)
 
-    def _getInputEncoding(self):
-        if self.px_doc.inputencoding:
-            return self.px_doc.inputencoding
-        return None
-    def _setInputEncoding(self, encoding):
-        PX_set_inputencoding(self.px_doc, encoding)
-    inputEncoding = property(_getInputEncoding, _setInputEncoding)
+    property inputEncoding:
+        def __get__(self):
+            if self.px_doc.inputencoding:
+                return self.px_doc.inputencoding
+            return None
+        def __set__(self, encoding):
+            PX_set_inputencoding(self.px_doc, encoding)
+            
 
     def setValue(self, parameter, value):
         PX_set_value(self.px_doc, parameter, <float>value)
@@ -249,13 +253,13 @@ cdef class PXDoc:
     def getTableName(self):
         return self.px_doc.px_head.px_tablename
 
-    def setBlobFile(self, filename):
+    cdef setBlobFile(self, bytes filename):
         """
         Set and open the external blob file.
         """
         PX_set_blob_file(self.px_doc, filename)
 
-    def setPrimaryIndex(self, PrimaryIndex index):
+    cdef setPrimaryIndex(self, PrimaryIndex index):
         """
         Set the primary index of the table.
         """
@@ -279,7 +283,7 @@ cdef class PXDoc:
             if v == None:
                 l = 0
             if f.ftype == pxfAlpha:
-                s = str(v or '').decode(self.inputEncoding)
+                s = str(v or '').decode(self.targetEncoding)
                 s = s.encode(self.getCodePage())
                 b = <char *>(self.px_doc.malloc(self.px_doc, f.flen, "Memory for alpha field"))
                 memcpy(b, <char *>s, max(f.flen, len(s)))
