@@ -115,8 +115,10 @@ cdef extern from "paradox.h":
         char isnull
         int type
         Pxval_value value
-        
-        
+    
+    void PX_boot()
+    void PX_shutdown()
+
     pxdoc_t* PX_new()
     pxdoc_t* PX_new2(void  (*errorhandler)(pxdoc_t *p, int type, const_char_ptr msg, void *data),
                      void* (*allocproc)(pxdoc_t *p, size_t size, const_char_ptr caller),
@@ -132,8 +134,10 @@ cdef extern from "paradox.h":
     int PX_set_parameter(pxdoc_t *pxdoc, char *name, char *value)
     int PX_set_value(pxdoc_t *pxdoc, char *name, float value)
     int PX_set_blob_file(pxdoc_t *pxdoc, const_char_ptr filename)
-    int PX_has_blob_file(pxdoc_t *pxdoc)
-    int PX_close(pxdoc_t *pxdoc)
+    bint PX_has_blob_file(pxdoc_t *pxdoc)
+    void PX_close(pxdoc_t *pxdoc)
+    void PX_delete(pxdoc_t *pxdoc)
+
 
     void* PX_get_record(pxdoc_t *pxdoc, int recno, void *data)
     void* PX_get_record2(pxdoc_t *pxdoc, int recno, void *data, int *deleted, pxdatablockinfo_t *pxdbinfo)

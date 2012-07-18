@@ -18,14 +18,12 @@ using the pxlib_ library.
 """
 
 import datetime
-
 import sys
+import atexit
 
 cimport cpython
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from cpython.version cimport PY_MAJOR_VERSION
-
-from libc.stdlib cimport *
 
 from paradox cimport *
 
@@ -47,12 +45,12 @@ cdef class Table:
     cdef readonly Record record
     cdef int current_recno
     cdef PrimaryIndex primary_index
-    targetEncoding = "utf-8"
-    inputEncoding = "utf-8"
+    targetEncoding = "utf8"
+    inputEncoding = "utf8"
     
     cdef fields
 
-    def __init__(self, filename):
+    def __cinit__(self, filename):
         self.doc = PXDoc(filename)
 
     def create(self, *fields):
@@ -174,7 +172,7 @@ cdef class PXDoc:
     cdef bytes filename
     cdef char isopen
 
-    def __init__(self, filename):
+    def __cinit__(self, filename):
         """
         Create a PXDoc instance, associated to the given external filename.
         """
@@ -281,7 +279,7 @@ cdef class PXDoc:
             if v == None:
                 l = 0
             if f.ftype == pxfAlpha:
-                s = unicode(str(v or '').decode('utf-8'))
+                s = str(v or '').decode(self.inputEncoding)
                 s = s.encode(self.getCodePage())
                 b = <char *>(self.px_doc.malloc(self.px_doc, f.flen, "Memory for alpha field"))
                 memcpy(b, <char *>s, max(f.flen, len(s)))
@@ -306,6 +304,8 @@ cdef class PXDoc:
         Close the data file
         """
         self.close()
+        PX_delete(self.px_doc)
+
 
 
 cdef class PrimaryIndex:
@@ -317,7 +317,7 @@ cdef class PrimaryIndex:
     cdef bytes filename
     cdef char isopen
 
-    def __init__(self, filename):
+    def __cinit__(self, filename):
         """
         Create a PXDoc instance, associated to the given external filename.
         """
@@ -344,6 +344,13 @@ cdef class PrimaryIndex:
         if self.isopen:
             PX_close(self.px_doc)
             self.isopen = 0
+
+    def __dealloc__(self):
+        """
+        Close the data file
+        """
+        self.close()
+        PX_delete(self.px_doc)
 
 
 cdef class ParadoxField:
@@ -523,7 +530,8 @@ cdef class RecordField(ParadoxField):
 
             if blobdata and size > 0:
                 codepage = self.record.doc.getCodePage()
-                py_string = PyString_FromStringAndSize(<char*> blobdata, size);
+                py_string = PyString_FromStringAndSize(<char*> blobdata, size)
+                self.record.doc.px_doc.free(self.record.doc.px_doc, blobdata)
                 if not py_string:
                     raise Exception("Cannot get value from string %s" % self.fname)
                 return PyString_AsDecodedObject(py_string, codepage, "replace")
@@ -540,7 +548,10 @@ cdef class RecordField(ParadoxField):
                 return None
 
             if blobdata and size > 0:
-                return PyString_FromStringAndSize(blobdata, size)
+                py_string = PyString_FromStringAndSize(blobdata, size)
+                self.record.doc.px_doc.free(self.record.doc.px_doc, blobdata)
+                return py_string
+
 
         elif self.ftype == pxfOLE:
             pass
@@ -629,3 +640,11 @@ cdef class Record:
 
     def __getitem__(self, key):
         return self.fields[key]
+
+# Sets up locale for pxlib
+PX_boot()
+
+# Shut down pxlib
+def __dealloc__():
+    PX_shutdown()
+atexit.register(__dealloc__)
