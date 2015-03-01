@@ -1,11 +1,4 @@
-#  -*- Pyrex -*-
-# :Project:  pxpy -- Python wrapper around pxlib
-# :Source:   $Source: /cvsroot/pxlib/bindings/python/pxpy.pyx,v $
-# :Created:  Sun, Apr 04 2004 00:20:28 CEST
-# :Author:   Lele Gaifax <lele@nautilus.homeip.net>
-# :Revision: $Revision: 1.6 $ by $Author: lele $
-# :Date:     $Date: 2004/09/25 01:18:17 $
-#
+#  -*- coding: utf-8 -*-
 
 """
 Python wrapper around pxlib.
@@ -21,14 +14,12 @@ import datetime
 import sys
 import atexit
 
-cimport cpython
-from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from cpython.version cimport PY_MAJOR_VERSION
 
 from paradox cimport *
 
-cdef void errorhandler(pxdoc_t *p, int type, char *msg, void *data):
-    print 'error', type, msg
+cdef void errorhandler(pxdoc_t *p, int type, const_char_ptr msg, void *data):
+    print "ParadoxError: %s - %s" % (type, msg)
 
 cdef class Record
 cdef class PXDoc
@@ -40,18 +31,21 @@ cdef class Table:
     An instance has notion about the current record number, and
     keeps a copy of the values associated to each field.
     """
-
     cdef PXDoc doc
     cdef readonly Record record
     cdef int current_recno
+    cdef target_encoding
+    cdef input_encoding
     cdef PrimaryIndex primary_index
-    targetEncoding = "utf8"
-    inputEncoding = "utf8"
-    
+    cdef blob_file
     cdef fields
 
-    def __cinit__(self, filename):
+    def __cinit__(self, filename, index_file=None, blob_file=None):
         self.doc = PXDoc(filename)
+        self.target_encoding = "UTF-8"
+        self.input_encoding = "UTF-8"
+        self.setPrimaryIndex(index_file)
+        self.blob_file = blob_file
 
     def create(self, *fields):
         self.fields = fields
@@ -62,11 +56,15 @@ cdef class Table:
         Open the data file and associate a Record instance.
         """
         self.doc.open()
-        self.setTargetEncoding(self.targetEncoding)
-        self.setInputEncoding(self.inputEncoding)
+        self.doc.targetEncoding = self.target_encoding
+        self.doc.inputEncoding = self.input_encoding
         self.record = Record(self.doc)
         self.current_recno = -1
-        self.primary_index = None
+        if self.primary_index is not None:
+            self.primary_index.open()
+            self.doc.setPrimaryIndex(self.primary_index)
+        if self.blob_file is not None:
+            self.setBlobFile(self.blob_file)
 
     def close(self):
         """
@@ -79,25 +77,29 @@ cdef class Table:
     def getTableName(self):
         return self.doc.getTableName()
 
+    def getName(self):
+        return self.doc.getName()
+
     def getTargetEncoding(self):
         return self.doc.targetEncoding
 
     def setTargetEncoding(self, encoding):
-        self.doc.targetEncoding = encoding
+        self.target_encoding = encoding
 
     def getInputEncoding(self):
         return self.doc.inputEncoding
 
     def setInputEncoding(self, encoding):
-        self.doc.inputEncoding = encoding
+        self.input_encoding = encoding
+
+    def getCodePage(self):
+        return self.doc.getCodePage()
 
     def setPrimaryIndex(self, filename):
         """
         Set the primary index of the table.
         """
-        self.primary_index = PrimaryIndex(filename)
-        self.primary_index.open()
-        self.doc.setPrimaryIndex(self.primary_index)
+        self.primary_index = PrimaryIndex(filename) if filename is not None else None
 
     def setBlobFile(self, filename):
         """
@@ -107,6 +109,12 @@ cdef class Table:
             filename = filename.encode(self.inputEncoding)
 
         self.doc.setBlobFile(filename)
+
+    def hasBlobFile(self):
+        return self.doc.hasBlobFile()
+
+    def getBlobName(self):
+        return self.doc.getBlobName()
 
     def getFieldsCount(self):
         """
@@ -130,7 +138,7 @@ cdef class Table:
                    print "%s: %s" % (f.fname, value)
         """
 
-        if not recno:
+        if recno is None:
             recno = self.current_recno + 1
         else:
             self.current_recno = recno
@@ -252,6 +260,12 @@ cdef class PXDoc:
 
     def getTableName(self):
         return self.px_doc.px_head.px_tablename
+    
+    def getName(self):
+        return self.px_doc.px_name
+
+    def getBlobName(self):
+        return self.px_doc.px_blob.mb_name if self.hasBlobFile() else None
 
     cdef setBlobFile(self, bytes filename):
         """
@@ -265,6 +279,10 @@ cdef class PXDoc:
         """
         if PX_add_primary_index(self.px_doc, index.px_doc) < 0:
             raise Exception("Couldn't add primary index `%s`" % index.filename)
+
+    cdef bint hasBlobFile(self):
+       return PX_has_blob_file(self.px_doc)
+
 
     def append(self, fields, values):
         cdef char *b
@@ -405,7 +423,7 @@ cdef class Field(ParadoxField):
 
 cdef class RecordField(ParadoxField):
     """
-    Represent a single field of a Record associated to some Table.
+    Represent a single field of a Record associated with some Table.
     """
 
     cdef void *data
@@ -429,7 +447,7 @@ cdef class RecordField(ParadoxField):
         return self.__unicode__().encode(self.record.doc.targetEncoding)
 
     def __unicode__(self):
-        return self.getValue()
+        return u"%s: %s" % (self.name, self.value)
 
     def getName(self):
         return self.fname
@@ -459,7 +477,7 @@ cdef class RecordField(ParadoxField):
             codepage = self.record.doc.getCodePage()
             size = strnlen(<char*> self.data, self.flen)
 
-            if size==0:
+            if size == 0:
                 return None
             else:
                 py_string = PyString_FromStringAndSize(<char*> self.data, size);
@@ -469,10 +487,10 @@ cdef class RecordField(ParadoxField):
 
         elif self.ftype == pxfDate:
             if PX_get_data_long(self.record.doc.px_doc,
-                                self.data, self.flen, &value_long)<0:
+                                self.data, self.flen, &value_long) < 0:
                 raise Exception("Cannot extract long field '%s'" % self.fname)
             if value_long:
-                PX_SdnToGregorian(value_long+1721425,
+                PX_SdnToGregorian(value_long + 1721425,
                                   &year, &month, &day)
                 return datetime.date(year, month, day)
             else:
@@ -522,7 +540,7 @@ cdef class RecordField(ParadoxField):
                 return False
 
         elif self.ftype in [pxfMemoBLOb, pxfFmtMemoBLOb, pxfBLOb]:
-            if not PX_has_blob_file(self.record.doc.px_doc):
+            if not self.record.doc.hasBlobFile():
                 return "[MISSING BLOB FILE]"
 
             ret = PX_get_data_blob(self.record.doc.px_doc, self.data, self.flen,
@@ -541,7 +559,7 @@ cdef class RecordField(ParadoxField):
                 return PyString_AsDecodedObject(py_string, codepage, "replace")
 
         elif self.ftype == pxfGraphic:
-            if not PX_has_blob_file(self.record.doc.px_doc):
+            if not self.record.doc.hasBlobFile():
                 return "[MISSING BLOB FILE]"
 
             ret = PX_get_data_graphic(self.record.doc.px_doc, self.data, self.flen,
@@ -583,7 +601,7 @@ cdef class RecordField(ParadoxField):
 
 cdef class Record:
     """
-    An instance of this class wraps the memory buffer associated to a
+    An instance of this class wraps the memory buffer associated with a
     single record of a given PXDoc.
     """
 
@@ -643,7 +661,13 @@ cdef class Record:
             raise StopIteration()
 
     def __getitem__(self, key):
-        return self.fields[key]
+        if isinstance(key, basestring):
+            for field in self.fields:
+                if field.name == key:
+                    return field
+            raise KeyError("'" + key + "'")
+        else:
+            return self.fields[key]
 
 # Sets up locale for pxlib
 PX_boot()

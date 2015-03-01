@@ -15,14 +15,17 @@ FIXTURE_DIR = os.path.join(os.path.dirname(__file__), 'fixtures')
 
 class PxLibTest(unittest.TestCase):
 
-    def test_headers(self):
+    def test_metadata(self):
         table = pxpy.Table(os.path.join(FIXTURE_DIR, 'KOMMENT.DB'))
         table.open()
         self.assertEqual(table.getTableName(), 'KOMMENT.DB')
+        self.assertEqual(os.path.basename(table.getName()), 'KOMMENT.DB')
         table.close()
 
     def test_iteration(self):
-        table = pxpy.Table(os.path.join(FIXTURE_DIR, 'LAND.DB'))
+        table = pxpy.Table(
+            os.path.join(FIXTURE_DIR, 'LAND.DB'),
+            os.path.join(FIXTURE_DIR, 'LAND.PX'))
         table.open()
 
         self.assertEqual(table.getFieldsCount(), 9)
@@ -40,21 +43,26 @@ class PxLibTest(unittest.TestCase):
         else:
             self.fail()
         
-        afg = table[0][2]
-        self.assertEquals(afg.getValue(), 'Afghanistan')
-        self.assertEquals(afg.fname, 'Land_navn')
+        afg = table[0]
+        field = afg[2]
+        self.assertEquals(field.value, 'Afghanistan')
+        self.assertEquals(field.name, 'Land_navn')
+        field = afg['Land_navn']
+        self.assertEquals(field.value, 'Afghanistan')
+        self.assertEquals(field.name, 'Land_navn')
 
         for i, record in enumerate(table):
             for j, field in enumerate(record):
                 same_field = table[i][j]
-                self.assertEquals(field.getValue(), same_field.getValue())
-                self.assertEquals(field.fname, same_field.fname)
+                self.assertEquals(field.value, same_field.value)
+                self.assertEquals(field.name, same_field.name)
         table.close()
 
     def test_blob_file(self):
-        table = pxpy.Table(os.path.join(FIXTURE_DIR, 'KOMMENT.DB'))
+        table = pxpy.Table(
+            os.path.join(FIXTURE_DIR, 'KOMMENT.DB'),
+            blob_file=os.path.join(FIXTURE_DIR, 'KOMMENT.MB'))
         table.open()
-        table.setBlobFile(os.path.join(FIXTURE_DIR, 'KOMMENT.MB'))
         
         baptistene = table[0]
         field = baptistene[0]
@@ -65,10 +73,8 @@ class PxLibTest(unittest.TestCase):
         self.assertEqual(baptistene[1].value, u"BAPTI")
         self.assertRegexpMatches(baptistene[3].value, r"^Statistikken inkluderer")
 
-        
         for record in table:
             self.assertNotEqual(record[3], "[MISSING BLOB FILE]")
-
         
         table.close()
 
