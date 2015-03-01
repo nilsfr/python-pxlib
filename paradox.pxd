@@ -1,3 +1,5 @@
+#  -*- coding: utf-8 -*-
+
 cdef extern from *:
     ctypedef char* const_char_ptr "const char*"
 

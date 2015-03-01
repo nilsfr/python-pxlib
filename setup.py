@@ -1,12 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# :Project:  pxpy -- Module setup
-# :Source:   $Source: /cvsroot/pxlib/bindings/python/Setup.py,v $
-# :Created:  Sun, Apr 04 2004 00:14:12 CEST
-# :Author:   Lele Gaifax <lele@nautilus.homeip.net>
-# :Revision: $Revision: 1.3 $ by $Author: lele $
-# :Date:     $Date: 2004/07/19 23:04:35 $
-#
 import os
 import sys
 
@@ -37,9 +30,9 @@ class clean(_clean):
 setup(
     name='python-pxlib',
     description="Python wrapper around pxlib",
-    version='0.0.1',
-    author="Lele Gaifax",
-    author_email="lele@nautilus.homeip.net",
+    version='0.1',
+    author="Nils Fredrik Gjerull",
+    author_email="nils@gjerull.net",
     url="http://pxlib.sourceforge.net/",
     test_suite='tests',
     cmdclass={

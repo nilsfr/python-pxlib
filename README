@@ -1,7 +1,10 @@
 Python wrapper around pxlib.
 
-This module, written in Pyrex_, allow to read data from Paradox tables
+This module, written in Cython_, allow to read data from Paradox tables
 using the pxlib_ library.
+
+This is a fork of python-pxpy_ written by Lele Gaifax <lele@nautilus.homeip.net>
 
 .. _cython: http://www.cython.org/
 .. _pxlib: http://pxlib.sourceforge.net/
+.. _python-pxpy: https://github.com/gleber/python-pxlib
