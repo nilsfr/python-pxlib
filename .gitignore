@@ -3,6 +3,6 @@
 /pxpy.c
 /.pyrex/
 /dist/
-/pxpy.so
 /*.egg-info/
 /*.egg/
+*.so

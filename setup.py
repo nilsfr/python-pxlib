@@ -8,7 +8,11 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '.pyrex'))
 from setuptools import setup, Extension
 from distutils.command.clean import clean as _clean
 from distutils import log
-from Cython.Distutils import build_ext
+
+
+def get_build_ext(_self):
+    from Cython.Distutils import build_ext
+    return build_ext(_self)
 
 
 class clean(_clean):
@@ -36,7 +40,7 @@ setup(
     url="http://pxlib.sourceforge.net/",
     test_suite='tests',
     cmdclass={
-        'build_ext': build_ext,
+        'build_ext': get_build_ext,
         'clean': clean
     },
     data_files=[
@@ -44,7 +48,6 @@ setup(
     ],
     zip_safe=False,
     setup_requires=["Cython>=0.13"],
-    tests_require=["unittest2==0.5.1"],
     ext_modules=[
         Extension('pxpy', ['pxpy.pyx'],
                   libraries=['px']),

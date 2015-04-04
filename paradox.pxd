@@ -1,17 +1,16 @@
 #  -*- coding: utf-8 -*-
-
 cdef extern from *:
     ctypedef char* const_char_ptr "const char*"
+
 
 cdef extern from "stdlib.h" nogil:
     void *memset(void *str, int c, size_t n)
     void *memcpy(void *str1, void *str2, size_t n)
 
+
 cdef extern from "Python.h":
-    object PyString_FromStringAndSize(char *s, int len)
-    object PyString_Decode(char *s, int len, char *encoding, char *errors)
-    object PyString_FromStringAndSize(char *v, int len)
-    object PyString_AsDecodedObject(object str, char *encoding, char *errors)
+    object PyBytes_FromStringAndSize(char *s, int len)
+    object PyUnicode_Decode(char *s, int len, char *encoding, char *errors)
 
 
 cdef extern from "string.h":
@@ -122,13 +121,21 @@ cdef extern from "paradox.h":
     void PX_shutdown()
 
     pxdoc_t* PX_new()
-    pxdoc_t* PX_new2(void  (*errorhandler)(pxdoc_t *p, int type, const_char_ptr msg, void *data),
-                     void* (*allocproc)(pxdoc_t *p, size_t size, const_char_ptr caller),
-                     void* (*reallocproc)(pxdoc_t *p, void *mem, size_t size, const_char_ptr caller),
-                     void  (*freeproc)(pxdoc_t *p, void *mem))
+    pxdoc_t* PX_new2(
+        void  (*errorhandler)(pxdoc_t *p, int type, const_char_ptr msg, void *data),
+        void* (*allocproc)(pxdoc_t *p, size_t size, const_char_ptr caller),
+        void* (*reallocproc)(pxdoc_t *p, void *mem, size_t size, const_char_ptr caller),
+        void  (*freeproc)(pxdoc_t *p, void *mem)
+        )
     char* PX_strdup(pxdoc_t *pxdoc, char *str)
     int PX_open_file(pxdoc_t *pxdoc, const_char_ptr filename)
-    int PX_create_file(pxdoc_t *pxdoc, pxfield_t *px_fields, unsigned int numfields,  char *filename, int type)
+    int PX_create_file(
+        pxdoc_t *pxdoc,
+        pxfield_t *px_fields,
+        unsigned int numfields,
+        char *filename,
+        int type
+        )
     int PX_read_primary_index(pxdoc_t *pindex)
     int PX_add_primary_index(pxdoc_t *pxdoc, pxdoc_t *pindex)
     int PX_set_targetencoding(pxdoc_t *pxdoc, char *encoding)
@@ -142,15 +149,35 @@ cdef extern from "paradox.h":
 
 
     void* PX_get_record(pxdoc_t *pxdoc, int recno, void *data)
-    void* PX_get_record2(pxdoc_t *pxdoc, int recno, void *data, int *deleted, pxdatablockinfo_t *pxdbinfo)
+    void* PX_get_record2(
+        pxdoc_t *pxdoc,
+        int recno,
+        void *data,
+        int *deleted,
+        pxdatablockinfo_t *pxdbinfo
+        )
     int PX_get_data_alpha(pxdoc_t *pxdoc, void *data, int len, char **value)
     int PX_get_data_bytes(pxdoc_t *pxdoc, void *data, int len, char **value)
     int PX_get_data_double(pxdoc_t *pxdoc, void *data, int len, double *value)
     int PX_get_data_long(pxdoc_t *pxdoc, void *data, int len, long *value)
     int PX_get_data_short(pxdoc_t *pxdoc, void *data, int len, short int *value)
     int PX_get_data_byte(pxdoc_t *pxdoc, void *data, int len, char *value)
-    int PX_get_data_blob(pxdoc_t *pxdoc, void *data, int len, int *mod, int *blobsize, char **value)
-    int PX_get_data_graphic(pxdoc_t *pxdoc, void *data, int len, int *mod, int *blobsize, char **value)
+    int PX_get_data_blob(
+        pxdoc_t *pxdoc,
+        void *data,
+        int len,
+        int *mod,
+        int *blobsize,
+        char **value
+        )
+    int PX_get_data_graphic(
+        pxdoc_t *pxdoc,
+        void *data,
+        int len,
+        int *mod,
+        int *blobsize,
+        char **value
+        )
     int PX_get_parameter(pxdoc_t *pxdoc, const_char_ptr name, char **value)
     pxval_t** PX_retrieve_record(pxdoc_t *pxdoc, int recno)
 
