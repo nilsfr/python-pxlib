@@ -36,7 +36,6 @@ cdef class Table:
     cdef str input_encoding
     cdef PrimaryIndex primary_index
     cdef bytes blob_file
-    cdef fields
 
     def __cinit__(self, filename, index_file=None, blob_file=None):
         self.target_encoding = DEFAULT_ENCODING
@@ -46,10 +45,6 @@ cdef class Table:
             if index_file is not None else None
         self.blob_file = blob_file.encode(DEFAULT_ENCODING)\
             if blob_file is not None else None
-
-    def create(self, *fields):
-        self.fields = fields
-        self.doc.create(fields)
 
     def open(self):
         """
@@ -130,10 +125,6 @@ cdef class Table:
 
     def __len__(self):
         return len(self.doc)
-
-    def append(self, values):
-        self.doc.append(self.fields, values)
-        self.current_recno = self.current_recno + 1
 
 
 cdef class RecordIterator:
@@ -224,24 +215,6 @@ cdef class PXDoc:
     def __len__(self):
         return self.px_doc.px_head.px_numrecords
 
-    def create(self, *fields):
-        n = len(fields)
-        cdef pxfield_t *f = <pxfield_t *>(self.px_doc.malloc(
-                self.px_doc,
-                n * sizeof(pxfield_t),
-                "Memory for fields"
-                ))
-        for i from 0 <= i < n:
-            f[i].px_fname = PX_strdup(self.px_doc, fields[i].fname)
-            f[i].px_flen = fields[i].flen
-            f[i].px_ftype = fields[i].ftype
-            f[i].px_fdc = 0
-
-        if PX_create_file(self.px_doc, f, n, self.filename, pxfFileTypIndexDB) < 0:
-            raise Exception("Couldn't open '%s'" % self.filename)
-        self.isopen = 1
-        self.current_recno = -1
-
     def open(self):
         """
         Open the data file.
@@ -319,51 +292,12 @@ cdef class PXDoc:
     cdef bint hasBlobFile(self):
        return PX_has_blob_file(self.px_doc)
 
-
-    def append(self, fields, values):
-        cdef char *b
-        l = len(fields)
-        n = sum([ f.flen for f in fields ])
-        bufsize = n * sizeof(char)
-        cdef char *buffer = <char *>(
-            self.px_doc.malloc(self.px_doc, bufsize, "Memory for appended record"))
-        memset(buffer, 0, bufsize)
-        o = 0
-        fs = {}
-        for i from 0 <= i < l:
-            f = fields[i]
-            v = values.get(f.fname, None)
-            l = f.flen
-            if v == None:
-                l = 0
-            if f.ftype == pxfAlpha:
-                s = str(v or '').decode(self.targetEncoding)
-                s = s.encode(self.getCodePage())
-                b = <char *>(self.px_doc.malloc(self.px_doc, f.flen, "Memory for alpha field"))
-                memcpy(b, <char *>s, max(f.flen, len(s)))
-                PX_put_data_alpha(self.px_doc, &buffer[o], f.flen, b)
-                self.px_doc.free(self.px_doc, b)
-            elif f.ftype == pxfLong:
-                PX_put_data_long(self.px_doc, &buffer[o], l, <long>int(v or 0))
-            elif f.ftype == pxfNumber:
-                PX_put_data_double(self.px_doc, &buffer[o], l, <double>float(v or 0.0))
-            else:
-                raise Exception("unknown type")
-            o += f.flen
-
-        if PX_put_record(self.px_doc, buffer) == -1:
-            raise Exception("unable to put record")
-
-        self.px_doc.free(self.px_doc, buffer)
-
-
     def __dealloc__(self):
         """
         Close the data file
         """
         self.close()
         PX_delete(self.px_doc)
-
 
 
 cdef class PrimaryIndex:
