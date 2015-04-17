@@ -21,7 +21,7 @@ from paradox cimport *
 cdef str DEFAULT_ENCODING="UTF-8"
 
 cdef void errorhandler(pxdoc_t *p, int type, const_char_ptr msg, void *data):
-    print "ParadoxError: %s - %s" % (type, msg)
+    print("ParadoxError: {} - {}".format(type, msg))
 
 cdef class Record
 cdef class PXDoc
@@ -29,13 +29,9 @@ cdef class PXDoc
 cdef class Table:
     """
     A `Table` represent a Paradox table, with primary index and blob file.
-
-    An instance has notion about the current record number, and
-    keeps a copy of the values associated to each field.
     """
     cdef PXDoc doc
-    cdef readonly Record record
-    cdef int current_recno
+    cdef RecordIterator defaultIterator
     cdef str target_encoding
     cdef str input_encoding
     cdef PrimaryIndex primary_index
@@ -62,13 +58,12 @@ cdef class Table:
         self.doc.open()
         self.doc.targetEncoding = self.target_encoding
         self.doc.inputEncoding = self.input_encoding
-        self.record = Record(self.doc)
-        self.current_recno = -1
         if self.primary_index is not None:
             self.primary_index.open()
             self.doc.setPrimaryIndex(self.primary_index)
         if self.blob_file is not None:
             self.doc.setBlobFile(self.blob_file)
+        self.defaultIterator = RecordIterator(self.doc)
 
     def __enter__(self):
         self.open()
@@ -112,58 +107,20 @@ cdef class Table:
     def getBlobName(self):
         return self.doc.getBlobName()
 
-    def getFieldCount(self):
-        return len(self.record)
-
-    def getFieldNames(self):
-        return self.record.getFieldNames()
-
     def getRecordCount(self):
         return len(self.doc)
 
-    def readRecord(self, recno=None):
-        """
-        Read the data of the next/some specific `recno` record.
+    def getFieldCount(self):
+        return self.defaultIterator.getFieldCount()
 
-        Return False if at EOF or `recno` is beyond the last record,
-        True otherwise. This makes this method suitable to be called
-        in a while loop in this way::
-
-           record = t.record
-           while t.readRecord():
-               for i in range(record.getFieldCount()):
-                   f = record.fields[i]
-                   value = f.getValue()
-                   print "%s: %s" % (f.fname, value)
-        """
-
-        if recno is None:
-            recno = self.current_recno + 1
-        else:
-            self.current_recno = recno
-
-        if recno >= len(self.doc):
-            return False
-
-        self.current_recno = recno
-
-        return self.record.read(recno)
+    def getFieldNames(self):
+        return self.defaultIterator.getFieldNames()
 
     def __iter__(self):
-        return self
-
-    def __next__(self):
-        ok = self.readRecord()
-        if not ok:
-            self.current_recno = -1
-            raise StopIteration()
-        return self.record
+        return self.defaultIterator
 
     def __getitem__(self, key):
-        if key >= len(self.doc):
-            raise IndexError()
-        self.record.read(key)
-        return self.record
+        return self.defaultIterator.readRecord(key)
 
     def __len__(self):
         return len(self.doc)
@@ -173,11 +130,57 @@ cdef class Table:
         self.current_recno = self.current_recno + 1
 
 
+cdef class RecordIterator:
+    """
+    An instance has notion about the current record number, offset and limit
+    """
+    cdef readonly Record record
+    cdef int limit
+    cdef int offset
+    cdef int current_recno
+
+    def __cinit__(self, PXDoc doc, limit=None, offset=None):
+        self.record = Record(doc)
+        self.limit = limit if limit else len(doc)
+        self.offset = offset if offset else 0
+        self.current_recno = -1
+
+    def next(self):
+        return self.__next__()
+
+    def __next__(self):
+        recno = self.current_recno + 1
+        ok = True
+        if recno >= self.limit:
+            ok = False
+        else:
+            self.current_recno = recno
+            ok = self.record.read(recno)
+        if not ok:
+            self.current_recno = -1
+            raise StopIteration()
+        return self.record
+
+    def __iter__(self):
+        return self
+
+    def getFieldCount(self):
+        return len(self.record)
+
+    def getFieldNames(self):
+        return self.record.getFieldNames()
+
+    def readRecord(self, recno):
+        if recno >= self.limit:
+            raise IndexError()
+        self.record.read(recno)
+        return self.record
+
+
 cdef class PXDoc:
     """
     Basic wrapper to 'pxdoc_t' based objects.
     """
-
     cdef pxdoc_t *px_doc
     cdef bytes filename
     cdef char isopen
@@ -601,6 +604,7 @@ cdef class RecordField(ParadoxField):
             pass
     value = property(getValue)
 
+
 cdef class Record:
     """
     An instance of this class wraps the memory buffer associated with a
@@ -659,6 +663,9 @@ cdef class Record:
 
     def __iter__(self):
         return self
+
+    def next(self):
+        return self.__next__()
 
     def __next__(self):
         fieldno = self.current_fieldno + 1
