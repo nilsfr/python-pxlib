@@ -30,35 +30,59 @@ class PxLibTest(unittest.TestCase):
         self.assertEqual(table.getRecordCount(), 59)
         table.close()
 
+    def test_context_manager(self):
+        with pxpy.Table(os.path.join(FIXTURE_DIR, 'KOMMENT.DB')) as table:
+            self.assertEqual(table.getTableName(), 'KOMMENT.DB')
+
+    def test_getitem(self):
+        with pxpy.Table(
+            os.path.join(FIXTURE_DIR, 'LAND.DB'),
+            os.path.join(FIXTURE_DIR, 'LAND.PX')
+        ) as table:
+            self.assertEqual(len(table), 216)
+
+            try:
+                table[216]
+            except IndexError:
+                pass
+            else:
+                self.fail()
+
+            try:
+                table[0][10]
+            except IndexError:
+                pass
+            else:
+                self.fail()
+
+            try:
+                table[-217]
+            except IndexError:
+                pass
+            else:
+                self.fail()
+
+            first = table[0]
+            field = first[2]
+            self.assertEqual(field.name, 'Land_navn')
+            self.assertEqual(field.value, 'Afghanistan')
+            field = first['Land_navn']
+            self.assertEqual(field.name, 'Land_navn')
+            self.assertEqual(field.value, 'Afghanistan')
+
+            last = table[-1]
+            field = last[0]
+            self.assertEqual(field.name, 'Land_kode')
+            self.assertEqual(field.value, 'ZZZ')
+
+            first_negative = table[-216]
+            self.assertEqual(first[0].value, first_negative[0].value)
+
     def test_iteration(self):
         table = pxpy.Table(
             os.path.join(FIXTURE_DIR, 'LAND.DB'),
             os.path.join(FIXTURE_DIR, 'LAND.PX'))
         table.open()
-
-        self.assertEqual(table.getFieldCount(), 9)
-        self.assertEqual(len(table), 216)
-        try:
-            table[216]
-        except IndexError:
-            pass
-        else:
-            self.fail()
-        try:
-            table[0][10]
-        except IndexError:
-            pass
-        else:
-            self.fail()
-        
-        afg = table[0]
-        field = afg[2]
-        self.assertEqual(field.value, 'Afghanistan')
-        self.assertEqual(field.name, 'Land_navn')
-        field = afg['Land_navn']
-        self.assertEqual(field.value, 'Afghanistan')
-        self.assertEqual(field.name, 'Land_navn')
-
         for i, record in enumerate(table):
             for j, field in enumerate(record):
                 same_field = table[i][j]
@@ -86,9 +110,47 @@ class PxLibTest(unittest.TestCase):
         
         table.close()
 
-    def test_context_manager(self):
-        with pxpy.Table(os.path.join(FIXTURE_DIR, 'KOMMENT.DB')) as table:
-            self.assertEqual(table.getTableName(), 'KOMMENT.DB')
+    def test_table_slice(self):
+        with pxpy.Table(
+                os.path.join(FIXTURE_DIR, 'LAND.DB'),
+                os.path.join(FIXTURE_DIR, 'LAND.PX')
+        ) as table:
+            first_10 = table[:10]
+            self.assertEqual(len(first_10), 10)
+            iterations = 0
+            for record in first_10:
+                iterations += 1
+            self.assertEqual(iterations, 10)
+            second_iteration = 0
+            for record in first_10:
+                second_iteration += 1
+            self.assertEqual(second_iteration, 10)
+
+            last_10 = table[-10:]
+            self.assertEqual(len(last_10), 10)
+            iterations = 0
+            for record in last_10:
+                iterations += 1
+            self.assertEqual(iterations, 10)
+
+            same_positive = table[-10:-10]
+            self.assertEqual(len(same_positive), 0)
+
+            same_negative = table[-10:-10]
+            self.assertEqual(len(same_negative), 0)
+
+            over_limit = table[-10:1000]
+            self.assertEqual(len(over_limit), 10)
+            iterations = 0
+            for record in over_limit:
+                iterations += 1
+            self.assertEqual(iterations, 10)
+
+            over_offset = table[1000:]
+            self.assertEqual(len(over_offset), 0)
+
+            middle = table[10:-10]
+            self.assertEqual(len(middle), len(table) - 20)
         
 
 if __name__ == "__main__":

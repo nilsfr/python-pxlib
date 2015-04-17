@@ -120,7 +120,13 @@ cdef class Table:
         return self.defaultIterator
 
     def __getitem__(self, key):
-        return self.defaultIterator.readRecord(key)
+        if isinstance(key, slice):
+            start = key.start if key.start else 0
+            stop = key.stop if key.stop else 0
+            step = key.step if key.step else 1
+            return RecordIterator(self.doc, start, stop, step)
+        elif isinstance(key, int):
+            return self.defaultIterator.readRecord(key)
 
     def __len__(self):
         return len(self.doc)
@@ -137,32 +143,52 @@ cdef class RecordIterator:
     cdef readonly Record record
     cdef int limit
     cdef int offset
+    cdef int step
     cdef int current_recno
 
-    def __cinit__(self, PXDoc doc, limit=None, offset=None):
+    def __cinit__(self, PXDoc doc, int offset=0, int limit=0, int step=1):
         self.record = Record(doc)
-        self.limit = limit if limit else len(doc)
-        self.offset = offset if offset else 0
-        self.current_recno = -1
+        cdef int doc_length = len(doc)
+
+        if limit == 0:
+            limit = doc_length
+        elif limit > doc_length:
+            limit = doc_length
+        elif limit < 0:
+            limit = doc_length + limit
+        self.limit = limit
+
+        if offset < 0:
+            offset = doc_length + offset
+        elif offset > doc_length:
+            offset = doc_length
+
+        self.offset = offset
+
+        self.step = step
+        self.current_recno = self.offset
 
     def next(self):
         return self.__next__()
 
     def __next__(self):
-        recno = self.current_recno + 1
+        recno = self.current_recno
         ok = True
         if recno >= self.limit:
             ok = False
         else:
-            self.current_recno = recno
             ok = self.record.read(recno)
+            self.current_recno = recno + self.step
         if not ok:
-            self.current_recno = -1
+            self.current_recno = self.offset
             raise StopIteration()
         return self.record
 
     def __iter__(self):
         return self
+
+    def __len__(self):
+        return self.limit - self.offset
 
     def getFieldCount(self):
         return len(self.record)
@@ -171,7 +197,9 @@ cdef class RecordIterator:
         return self.record.getFieldNames()
 
     def readRecord(self, recno):
-        if recno >= self.limit:
+        if recno < 0:
+            recno = self.limit + recno
+        if recno >= self.limit or recno < 0:
             raise IndexError()
         self.record.read(recno)
         return self.record
@@ -588,9 +616,11 @@ cdef class RecordField(ParadoxField):
                                 self.data, self.flen, &value_long)<0:
                 raise Exception("Cannot extract long field '%s'" % self.fname)
             if value_long:
-                return datetime.time(value_long/3600000,
-                                     value_long/60000%60,
-                                     value_long%60000/1000.0)
+                return datetime.time(
+                    value_long/3600000,
+                    value_long/60000%60,
+                    value_long%60000/1000.0
+                )
             else:
                 return None
 
@@ -616,7 +646,7 @@ cdef class Record:
     cdef PXDoc doc
     cdef public fields
 
-    def __init__(self, PXDoc doc):
+    def __cinit__(self, PXDoc doc):
         """
         Create a Record instance, allocating the memory buffer and
         building the list of the Field instances.
@@ -628,7 +658,7 @@ cdef class Record:
             doc.px_doc,
             doc.px_doc.px_head.px_recordsize,
             "Memory for record"
-            )
+        )
         self.current_fieldno = -1
 
         self.doc = doc
@@ -637,7 +667,11 @@ cdef class Record:
         for i in range(len(self)):
             field = RecordField(self, i, offset)
             self.fields.append(field)
-            offset = offset + doc.px_doc.px_head.px_fields[i].px_flen        
+            offset = offset + doc.px_doc.px_head.px_fields[i].px_flen
+
+    def __dealloc__(self):
+        if self.doc:
+            self.doc.px_doc.free(self.doc.px_doc, self.data)
 
     def getFieldNames(self):
         return [f.name for f in self.fields]
