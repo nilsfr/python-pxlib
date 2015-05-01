@@ -71,6 +71,10 @@ class PxLibTest(unittest.TestCase):
             self.assertEqual(field.getName(), 'Land_navn')
             self.assertEqual(field.getValue(), 'Afghanistan')
 
+            second = table[1]
+            self.assertEqual(second[0].getValue(), 'AGO')
+            self.assertEqual(first[0].getValue(), 'AFG')
+
             last = table[-1]
             field = last[0]
             self.assertEqual(field.getName(), 'Land_kode')
@@ -156,5 +160,3 @@ class PxLibTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-    

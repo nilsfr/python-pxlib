@@ -121,7 +121,7 @@ cdef class Table:
             step = key.step if key.step else 1
             return RecordIterator(self.doc, start, stop, step)
         elif isinstance(key, int):
-            return self.defaultIterator.readRecord(key)
+            return self.defaultIterator[key]
 
     def __len__(self):
         return len(self.doc)
@@ -131,6 +131,7 @@ cdef class RecordIterator:
     """
     An instance has notion about the current record number, offset and limit
     """
+    cdef readonly PXDoc doc
     cdef readonly Record record
     cdef int limit
     cdef int offset
@@ -138,6 +139,7 @@ cdef class RecordIterator:
     cdef int current_recno
 
     def __cinit__(self, PXDoc doc, int offset=0, int limit=0, int step=1):
+        self.doc = doc
         self.record = Record(doc)
         cdef int doc_length = len(doc)
 
@@ -187,13 +189,14 @@ cdef class RecordIterator:
     def getFieldNames(self):
         return self.record.getFieldNames()
 
-    def readRecord(self, recno):
+    def __getitem__(self, recno):
         if recno < 0:
             recno = self.limit + recno
         if recno >= self.limit or recno < 0:
             raise IndexError()
-        self.record.read(recno)
-        return self.record
+        record = Record(self.doc)
+        record.read(recno)
+        return record
 
 
 cdef class PXDoc:
