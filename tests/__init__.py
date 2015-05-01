@@ -63,20 +63,21 @@ class PxLibTest(unittest.TestCase):
                 self.fail()
 
             first = table[0]
+            self.assertEqual(first[0].getValue(), 'AFG')
             field = first[2]
-            self.assertEqual(field.name, 'Land_navn')
-            self.assertEqual(field.value, 'Afghanistan')
+            self.assertEqual(field.getName(), 'Land_navn')
+            self.assertEqual(field.getValue(), 'Afghanistan')
             field = first['Land_navn']
-            self.assertEqual(field.name, 'Land_navn')
-            self.assertEqual(field.value, 'Afghanistan')
+            self.assertEqual(field.getName(), 'Land_navn')
+            self.assertEqual(field.getValue(), 'Afghanistan')
 
             last = table[-1]
             field = last[0]
-            self.assertEqual(field.name, 'Land_kode')
-            self.assertEqual(field.value, 'ZZZ')
+            self.assertEqual(field.getName(), 'Land_kode')
+            self.assertEqual(field.getValue(), 'ZZZ')
 
             first_negative = table[-216]
-            self.assertEqual(first[0].value, first_negative[0].value)
+            self.assertEqual(first[0].getValue(), first_negative[0].getValue())
 
     def test_iteration(self):
         table = pxpy.Table(
@@ -86,8 +87,8 @@ class PxLibTest(unittest.TestCase):
         for i, record in enumerate(table):
             for j, field in enumerate(record):
                 same_field = table[i][j]
-                self.assertEqual(field.value, same_field.value)
-                self.assertEqual(field.name, same_field.name)
+                self.assertEqual(field.getValue(), same_field.getValue())
+                self.assertEqual(field.getName(), same_field.getName())
         table.close()
 
     def test_blob_file(self):
@@ -98,12 +99,12 @@ class PxLibTest(unittest.TestCase):
         
         baptistene = table[0]
         field = baptistene[0]
-        self.assertEqual(field.name, u"Aar")
-        self.assertEqual(field.value, u"2006")
+        self.assertEqual(field.getName(), u"Aar")
+        self.assertEqual(field.getValue(), u"2006")
         self.assertEqual(field.type, 1)
         
-        self.assertEqual(baptistene[1].value, u"BAPTI")
-        self.assertRegex(baptistene[3].value, r"^Statistikken inkluderer")
+        self.assertEqual(baptistene[1].getValue(), u"BAPTI")
+        self.assertRegex(baptistene[3].getValue(), r"^Statistikken inkluderer")
 
         for record in table:
             self.assertNotEqual(record[3], "[MISSING BLOB FILE]")

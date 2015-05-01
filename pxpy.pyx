@@ -414,11 +414,10 @@ cdef class RecordField(ParadoxField):
             )
 
     def __str__(self):
-        return "{}: {}".format(self.name, self.value)
+        return "{}: {}".format(self.getName(), self.getValue())
 
     def getName(self):
         return self.fname.decode(self.record.doc.targetEncoding)
-    name = property(getName)
 
     def getType(self):
         return self.ftype
@@ -566,7 +565,6 @@ cdef class RecordField(ParadoxField):
             pass
         elif self.ftype == pxfNumTypes:
             pass
-    value = property(getValue)
 
 
 cdef class Record:
@@ -608,7 +606,7 @@ cdef class Record:
             self.doc.px_doc.free(self.doc.px_doc, self.data)
 
     def getFieldNames(self):
-        return [f.name for f in self.fields]
+        return [f.getName() for f in self.fields]
 
     def __len__(self):
         """
@@ -627,7 +625,7 @@ cdef class Record:
         return True
 
     def __str__(self):
-        return "{0}".format([(f.name, f.value) for f in self.fields])
+        return "{0}".format([(f.getName(), f.getValue()) for f in self.fields])
 
     def __iter__(self):
         return self
@@ -648,7 +646,7 @@ cdef class Record:
     def __getitem__(self, key):
         if isinstance(key, str):
             for field in self.fields:
-                if field.name == key:
+                if field.getName() == key:
                     return field
             raise KeyError("'" + key + "'")
         else:
